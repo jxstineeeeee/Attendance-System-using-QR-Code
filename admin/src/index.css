@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand greens */
+  --color-brand: #1d5a3a;
+  --color-brand-hover: #174a30;
+  --color-brand-active: #2d7350;
+  --color-brand-ink: #2b6446;
+  --color-brand-line: #3d7a5a;
+  --color-brand-soft: #e3eee7;
+  --color-brand-tint: #d5e6db;
+  --color-brand-pale: #e6f0ea;
+
+  /* Surfaces */
+  --color-cream: #f6f5f0;
+  --color-line: #dcdad1;
+  --color-line-strong: #c9c7bd;
+  --color-line-soft: #ebe9e5;
+  --color-placeholder-bg: #e9e7e0;
+
+  /* Text */
+  --color-ink: #1a1a17;
+  --color-muted: #5a5a55;
+  --color-subtle: #8a8a84;
+
+  /* Accent + status */
+  --color-gold: #c9a227;
+  --color-info-bg: #dde8f6;
+  --color-info-fg: #1c4a80;
+  --color-warn-bg: #fbefd0;
+  --color-warn-fg: #7a5a00;
+  --color-danger-bg: #f6dede;
+  --color-danger-fg: #8a2323;
+  --color-danger-line: #e3c4c4;
+
+  /*
+   * Attendance chart ramp. Present / Late / Absent are statuses, not series, so
+   * these are fixed and never reused for anything else. Validated as a set on a
+   * white chart surface: worst CVD deltaE 9.1, worst normal-vision deltaE 22.9.
+   * Present and Late fall under 3:1 against white, so every chart using them
+   * ships a legend plus direct labels and is backed by the Attendance table.
+   */
+  --color-present: #1baf7a;
+  --color-late: #eda100;
+  --color-absent: #d03b3b;
+
+  /* Chart chrome */
+  --color-grid: #ebe9e5;
+  --color-axis: #c9c7bd;
+
+  --font-sans: "Barlow", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Barlow Condensed", "Barlow", ui-sans-serif, sans-serif;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-cream);
+    color: var(--color-ink);
+  }
+
+  /* Native controls inherit the type scale instead of the browser default. */
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+}
+
+@utility display-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+/* Shared focus ring so keyboard users get the same affordance everywhere. */
+@utility focus-ring {
+  outline: none;
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand) 18%, transparent);
+}
