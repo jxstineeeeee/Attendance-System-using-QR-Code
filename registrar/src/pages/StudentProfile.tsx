@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Loader2, User } from 'lucide-react'
 import {
+  REISSUE_REASONS,
   formatDate,
   fullName,
   gradeAndSection,
@@ -13,7 +14,6 @@ import {
   reissueCard,
   setStudentActive,
 } from '../lib/db'
-import { useAuth } from '../lib/auth'
 import {
   Badge,
   Button,
@@ -24,12 +24,12 @@ import {
   Select,
 } from '../components/ui'
 import { ErrorBlock, FormError, LoadingBlock } from '../components/states'
-
-const REISSUE_REASONS = ['Lost', 'Damaged', 'Stolen', 'Incorrect details']
+import { IdQrCode } from '../components/IdQrCode'
+import { PrinterSelect } from '../components/PrinterSelect'
+import { usePrinter } from '../lib/printer'
 
 export function StudentProfile() {
   const { id } = useParams()
-  const { registrar } = useAuth()
 
   const [student, setStudent] = useState<Student | null>(null)
   const [loading, setLoading] = useState(true)
@@ -90,11 +90,7 @@ export function StudentProfile() {
         Back to students
       </Link>
 
-      <ProfileHeader
-        student={student}
-        registrarId={registrar?.id ?? null}
-        onChanged={load}
-      />
+      <ProfileHeader student={student} onChanged={load} />
 
       <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_460px]">
         <div className="flex flex-col gap-6">
@@ -136,7 +132,10 @@ export function StudentProfile() {
           </Card>
         </div>
 
-        <IdCardHistory student={student} />
+        <div className="flex flex-col gap-6">
+          <ActiveIdQr student={student} />
+          <IdCardHistory student={student} />
+        </div>
       </div>
     </div>
   )
@@ -144,13 +143,12 @@ export function StudentProfile() {
 
 function ProfileHeader({
   student,
-  registrarId,
   onChanged,
 }: {
   student: Student
-  registrarId: string | null
   onChanged: () => Promise<void>
 }) {
+  const { selected: printer } = usePrinter()
   const [busy, setBusy] = useState<'print' | 'reissue' | 'active' | null>(null)
   const [error, setError] = useState('')
   const [reissuing, setReissuing] = useState(false)
@@ -213,9 +211,7 @@ function ProfileHeader({
             variant="primary"
             disabled={hasActiveCard || busy !== null}
             onClick={() =>
-              void run('print', () =>
-                issueCard(student.id, student.lrn, registrarId),
-              )
+              void run('print', () => issueCard(student.id, printer))
             }
           >
             {busy === 'print' && (
@@ -275,7 +271,7 @@ function ProfileHeader({
             disabled={busy !== null}
             onClick={() =>
               void run('reissue', () =>
-                reissueCard(student.id, student.lrn, reason, registrarId),
+                reissueCard(student.id, reason, printer),
               )
             }
           >
@@ -291,6 +287,54 @@ function ProfileHeader({
       )}
 
       {error && <FormError message={error} />}
+    </Card>
+  )
+}
+
+/**
+ * The scannable code for the card the learner is carrying now. Revoked cards
+ * deliberately get no QR here — showing one would invite printing a card the
+ * gate is going to refuse.
+ */
+function ActiveIdQr({ student }: { student: Student }) {
+  const active = student.cards.find((c) => c.status === 'active')
+
+  return (
+    <Card className="p-6">
+      <CardTitle>QR code</CardTitle>
+
+      {active ? (
+        <div className="mt-5 flex flex-col items-center gap-3.5">
+          <div className="rounded-lg border border-line bg-white p-3">
+            <IdQrCode value={active.qrContent} />
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <span className="text-[17px] font-semibold text-ink tabular-nums">
+              {active.qrContent}
+            </span>
+            <span className="text-center text-[13px] text-muted">
+              LRN {student.lrn} + card code · issued{' '}
+              {formatDate(active.issued)}
+              {active.printer ? ` · ${active.printer}` : ''}
+            </span>
+          </div>
+
+          <div className="mt-1 w-full border-t border-line-soft pt-4">
+            <PrinterSelect id={`printer-${student.id}`} />
+          </div>
+        </div>
+      ) : (
+        <>
+          <p className="mt-5 rounded-lg bg-cream px-4 py-6 text-center text-[15px] text-muted">
+            {student.cards.length === 0
+              ? 'No ID card has been issued yet, so there is no code to scan.'
+              : 'Every card has been revoked. Reissue one to generate a new code.'}
+          </p>
+          <div className="mt-5 border-t border-line-soft pt-4">
+            <PrinterSelect id={`printer-${student.id}`} />
+          </div>
+        </>
+      )}
     </Card>
   )
 }

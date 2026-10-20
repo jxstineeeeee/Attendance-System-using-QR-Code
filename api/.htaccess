@@ -1,0 +1,4 @@
+# api/ sits inside the Apache document root only when it is aliased or linked
+# there. Everything outside api/public (config.php, src/, tools/) is off limits;
+# api/public/.htaccess grants access back for the front controller.
+Require all denied

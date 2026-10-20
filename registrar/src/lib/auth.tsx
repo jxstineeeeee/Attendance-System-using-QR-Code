@@ -7,15 +7,17 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { Session } from '@supabase/supabase-js'
-import { supabase } from './supabase'
-import type { Registrar } from './types'
+import { api } from './api'
+import type { AuthUser } from './types'
 
+/**
+ * Sign-in state. The session itself is a PHP cookie the browser holds and the
+ * API validates on every request; this only mirrors who it belongs to so the
+ * UI can gate routes and name the person in the sidebar.
+ */
 interface AuthValue {
-  session: Session | null
-  /** The signed-in user's registrars row, or null while it is still loading. */
-  registrar: Registrar | null
-  /** True until the stored session has been restored on first paint. */
+  user: AuthUser | null
+  /** True until the stored session has been checked on first paint. */
   loading: boolean
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
@@ -24,73 +26,51 @@ interface AuthValue {
 const AuthContext = createContext<AuthValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null)
-  const [registrar, setRegistrar] = useState<Registrar | null>(null)
+  const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (cancelled) return
-      setSession(data.session)
-      setLoading(false)
-    })
-
-    // Only mirrors the session into state — calling back into supabase from
-    // inside this listener can deadlock the client, so the profile fetch lives
-    // in its own effect below.
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
-      setSession(next)
-      setLoading(false)
-    })
-
-    return () => {
-      cancelled = true
-      sub.subscription.unsubscribe()
-    }
-  }, [])
-
-  const userId = session?.user.id ?? null
-
-  useEffect(() => {
-    if (!userId) {
-      setRegistrar(null)
-      return
-    }
-
-    let cancelled = false
-    supabase
-      .from('registrars')
-      .select('id, full_name, role')
-      .eq('id', userId)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (cancelled || !data) return
-        setRegistrar({ id: data.id, name: data.full_name, role: data.role })
+    api
+      .get<{ user: AuthUser | null }>('/auth/session')
+      .then(({ user }) => {
+        if (!cancelled) setUser(user)
+      })
+      .catch(() => {
+        // An unreachable API is the same as being signed out: the login screen
+        // is where the error belongs, and it reports it on submit.
+        if (!cancelled) setUser(null)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
       })
 
     return () => {
       cancelled = true
     }
-  }, [userId])
+  }, [])
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    const res = await api.post<{ user: AuthUser }>('/auth/login', {
       email: email.trim(),
       password,
     })
-    if (error) throw new Error(error.message)
+    setUser(res.user)
   }, [])
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut()
-    setRegistrar(null)
+    try {
+      await api.post('/auth/logout')
+    } finally {
+      // Whatever the server said, this browser is done with the session.
+      setUser(null)
+    }
   }, [])
 
   const value = useMemo(
-    () => ({ session, registrar, loading, signIn, signOut }),
-    [session, registrar, loading, signIn, signOut],
+    () => ({ user, loading, signIn, signOut }),
+    [user, loading, signIn, signOut],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
