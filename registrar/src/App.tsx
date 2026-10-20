@@ -5,7 +5,7 @@ import { Login } from './pages/Login'
 import { Students } from './pages/Students'
 import { RegisterStudent } from './pages/RegisterStudent'
 import { StudentProfile } from './pages/StudentProfile'
-import { PrintQueue, ReissueRevoke } from './pages/Placeholder'
+import { ReissueRevoke } from './pages/ReissueRevoke'
 
 export function App() {
   return (
@@ -18,7 +18,6 @@ export function App() {
           <Route path="/students" element={<Students />} />
           <Route path="/students/:id" element={<StudentProfile />} />
           <Route path="/register" element={<RegisterStudent />} />
-          <Route path="/print-queue" element={<PrintQueue />} />
           <Route path="/reissue" element={<ReissueRevoke />} />
         </Route>
       </Route>

@@ -2,15 +2,14 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Printer, Search, User } from 'lucide-react'
 import {
-  GRADE_LEVELS,
   ID_STATUS_LABEL,
-  SECTIONS,
   fullName,
   gradeAndSection,
   type IdStatus,
   type Student,
 } from '../lib/types'
 import { listStudents } from '../lib/db'
+import { sectionsFor, useRoster } from '../lib/roster'
 import {
   Badge,
   Button,
@@ -37,6 +36,10 @@ export function Students() {
   const [section, setSection] = useState('')
   const [status, setStatus] = useState('')
   const [page, setPage] = useState(0)
+
+  // Grade levels and sections come from the roster in MySQL, not a constant.
+  const { roster } = useRoster()
+  const sections = sectionsFor(roster, grade)
 
   const [rows, setRows] = useState<Student[]>([])
   const [total, setTotal] = useState(0)
@@ -152,13 +155,16 @@ export function Students() {
             value={grade}
             onChange={(e) => {
               setGrade(e.target.value)
+              // The sections on offer change with the grade, so a stale pick
+              // would filter the list down to nothing.
+              setSection('')
               resetPage()
             }}
           >
             <option value="">All grades</option>
-            {GRADE_LEVELS.map((g) => (
-              <option key={g} value={g}>
-                {g}
+            {roster.grades.map((g) => (
+              <option key={g.name} value={g.name}>
+                {g.name}
               </option>
             ))}
           </Select>
@@ -174,7 +180,7 @@ export function Students() {
             }}
           >
             <option value="">All sections</option>
-            {SECTIONS.map((s) => (
+            {sections.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>

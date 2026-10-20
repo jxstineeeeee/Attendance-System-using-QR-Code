@@ -9,15 +9,11 @@ import {
   Upload,
   User,
 } from 'lucide-react'
-import {
-  GRADE_LEVELS,
-  RELATIONSHIPS,
-  SECTIONS,
-  STRANDS,
-  isSeniorHigh,
-} from '../lib/types'
+import { RELATIONSHIPS } from '../lib/types'
 import { isLrnTaken, registerStudent } from '../lib/db'
-import { useAuth } from '../lib/auth'
+import { sectionsFor, useRoster } from '../lib/roster'
+import { usePrinter } from '../lib/printer'
+import { PrinterSelect } from '../components/PrinterSelect'
 import {
   Button,
   Card,
@@ -38,7 +34,6 @@ const EMPTY = {
   sex: '',
   gradeLevel: '',
   section: '',
-  strand: '',
   guardianName: '',
   relationship: '',
   contactNumber: '',
@@ -48,7 +43,8 @@ const LRN_PATTERN = /^\d{12}$/
 
 export function RegisterStudent() {
   const navigate = useNavigate()
-  const { registrar } = useAuth()
+  const { roster, error: rosterError } = useRoster()
+  const { selected: printer } = usePrinter()
   const [form, setForm] = useState(EMPTY)
   const [lrnTaken, setLrnTaken] = useState(false)
   const [checkingLrn, setCheckingLrn] = useState(false)
@@ -60,7 +56,14 @@ export function RegisterStudent() {
 
   const lrnComplete = LRN_PATTERN.test(form.lrn)
   const lrnValid = lrnComplete && !lrnTaken
-  const seniorHigh = isSeniorHigh(form.gradeLevel)
+
+  const sections = sectionsFor(roster, form.gradeLevel)
+  // The section a learner is enrolled in is what carries the strand, so it is
+  // shown rather than chosen — picking Grade 11 Kamagong is picking STEM.
+  const strand =
+    roster.sections.find(
+      (s) => s.gradeLevel === form.gradeLevel && s.name === form.section,
+    )?.strand ?? ''
 
   // The uniqueness check is a round trip, so only ask once the LRN is complete
   // and the user has paused. The unique index is still the real guard.
@@ -104,7 +107,7 @@ export function RegisterStudent() {
 
     setSubmitting(true)
     try {
-      const id = await registerStudent(form, registrar?.id ?? null)
+      const id = await registerStudent(form, printer)
       navigate(`/students/${id}`)
     } catch (err) {
       setError(
@@ -229,16 +232,20 @@ export function RegisterStudent() {
                     id="gradeLevel"
                     value={form.gradeLevel}
                     onChange={(e) => {
-                      set('gradeLevel')(e.target.value)
-                      // Strand only applies to senior high, so drop it otherwise.
-                      if (!isSeniorHigh(e.target.value)) set('strand')('')
+                      // Sections belong to one grade, so the old pick cannot
+                      // carry over.
+                      setForm((f) => ({
+                        ...f,
+                        gradeLevel: e.target.value,
+                        section: '',
+                      }))
                     }}
                     required
                   >
                     <option value="">Select grade</option>
-                    {GRADE_LEVELS.map((g) => (
-                      <option key={g} value={g}>
-                        {g}
+                    {roster.grades.map((g) => (
+                      <option key={g.name} value={g.name}>
+                        {g.name}
                       </option>
                     ))}
                   </Select>
@@ -248,30 +255,29 @@ export function RegisterStudent() {
                     id="section"
                     value={form.section}
                     onChange={(e) => set('section')(e.target.value)}
+                    disabled={!form.gradeLevel}
                     required
                   >
-                    <option value="">Select section</option>
-                    {SECTIONS.map((s) => (
+                    <option value="">
+                      {form.gradeLevel ? 'Select section' : 'Pick a grade first'}
+                    </option>
+                    {sections.map((s) => (
                       <option key={s} value={s}>
                         {s}
                       </option>
                     ))}
                   </Select>
                 </Field>
-                <Field label="Strand (SHS only)" htmlFor="strand">
-                  <Select
-                    id="strand"
-                    value={form.strand}
-                    onChange={(e) => set('strand')(e.target.value)}
-                    disabled={!seniorHigh}
-                  >
-                    <option value="">None</option>
-                    {STRANDS.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </Select>
+                <Field
+                  label="Strand (SHS only)"
+                  htmlFor="strand"
+                  hint={
+                    <p className="text-[13px] text-muted">
+                      Set by the section.
+                    </p>
+                  }
+                >
+                  <Input id="strand" value={strand || 'None'} readOnly disabled />
                 </Field>
               </div>
             </div>
@@ -379,8 +385,12 @@ export function RegisterStudent() {
             </span>
           </div>
 
+          <PrinterSelect />
+
           <div className="flex flex-col gap-2">
-            {error && <FormError message={error} />}
+            {(error || rosterError) && (
+              <FormError message={error || rosterError} />
+            )}
             <Button
               type="submit"
               variant="primary"

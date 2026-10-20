@@ -1,24 +1,21 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { LogOut, Printer, RotateCcw, UserPlus, Users } from 'lucide-react'
-import { SCHOOL, nameInitials } from '../lib/types'
+import { LogOut, RotateCcw, UserPlus, Users } from 'lucide-react'
+import { ROLE_LABEL, SCHOOL, nameInitials } from '../lib/types'
 import { useAuth } from '../lib/auth'
 import { cx } from '../components/ui'
 
 const NAV = [
   { to: '/students', label: 'Students', icon: Users },
   { to: '/register', label: 'Register Student', icon: UserPlus },
-  { to: '/print-queue', label: 'Print Queue', icon: Printer },
   { to: '/reissue', label: 'Reissue / Revoke', icon: RotateCcw },
 ]
 
 export function Sidebar() {
   const navigate = useNavigate()
-  const { session, registrar, signOut } = useAuth()
+  const { user, signOut } = useAuth()
 
-  // The profile row can resolve a beat after the session does, so fall back to
-  // the signed-in email rather than showing an empty footer.
-  const name = registrar?.name ?? session?.user.email ?? 'Signed in'
-  const role = registrar?.role ?? 'Registrar'
+  const name = user?.name ?? 'Signed in'
+  const role = user ? (ROLE_LABEL[user.role] ?? user.role) : 'Registrar'
 
   async function handleSignOut() {
     await signOut()

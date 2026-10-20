@@ -8,59 +8,59 @@ export interface IdCard {
   /** ISO timestamp from the database; render with formatDate. */
   issued: string
   status: CardStatus
-  reason?: string
+  reason: string | null
+  /** The printer selected when the card was issued, if any was. */
+  printer: string | null
 }
 
+/**
+ * A learner as the API sends them. Columns that are nullable in MySQL arrive
+ * as null rather than missing, so they are typed that way instead of optional.
+ */
 export interface Student {
   id: string
   lrn: string
   lastName: string
   firstName: string
-  middleName?: string
-  suffix?: string
-  sex?: 'Male' | 'Female'
+  middleName: string | null
+  suffix: string | null
+  sex: 'Male' | 'Female' | null
+  /** Empty when the learner has no enrolment in the active school year. */
   gradeLevel: string
   section: string
-  strand?: string
+  strand: string | null
   idStatus: IdStatus
   active: boolean
   guardianName: string
-  relationship?: string
+  relationship: string | null
   contactNumber: string
-  photoPath?: string
+  photoPath: string | null
   /** ISO timestamps; render with formatDate. */
   registeredOn: string
   lastUpdated: string
-  registeredByName?: string
+  registeredByName: string | null
   cards: IdCard[]
 }
 
-export interface Registrar {
+/** The signed-in staff account, from the `users` table. */
+export interface AuthUser {
   id: string
   name: string
-  role: string
+  email: string
+  role: 'registrar' | 'admin'
 }
 
-export const GRADE_LEVELS = [
-  'Grade 7',
-  'Grade 8',
-  'Grade 9',
-  'Grade 10',
-  'Grade 11',
-  'Grade 12',
-]
+export const ROLE_LABEL: Record<string, string> = {
+  admin: 'Administrator',
+  registrar: 'Registrar',
+  scanner: 'Scanner',
+}
 
-export const SECTIONS = [
-  'Sampaguita',
-  'Narra',
-  'Molave',
-  'Acacia',
-  'Ilang-Ilang',
-  'Kamagong',
-]
-
-export const STRANDS = ['STEM', 'ABM', 'HUMSS', 'GAS', 'TVL']
-
+/**
+ * Grade levels, sections and strands are rows in MySQL, not constants — the
+ * screens load them from GET /options (see listOptions in lib/db.ts), because
+ * a learner can only be enrolled into a section that is on the roster.
+ */
 export const RELATIONSHIPS = [
   'Mother',
   'Father',
@@ -69,15 +69,24 @@ export const RELATIONSHIPS = [
   'Sibling',
 ]
 
+/** Why a card is being replaced. Stored verbatim in id_cards.revoked_reason. */
+export const REISSUE_REASONS = ['Lost', 'Damaged', 'Stolen', 'Incorrect details']
+
+/**
+ * Revoking without a replacement covers those plus the cases where the learner
+ * is not getting another card at all.
+ */
+export const REVOKE_REASONS = [
+  ...REISSUE_REASONS,
+  'Transferred out',
+  'No longer enrolled',
+]
+
 export const ID_STATUS_LABEL: Record<IdStatus, string> = {
   printed: 'Printed',
   'not-printed': 'Not printed',
   'reissue-needed': 'Reissue needed',
 }
-
-/** Grades 11 and 12 are senior high, the only band that carries a strand. */
-export const isSeniorHigh = (grade: string) =>
-  grade === 'Grade 11' || grade === 'Grade 12'
 
 export const fullName = (s: Student) => {
   const mi = s.middleName ? ` ${s.middleName.charAt(0)}.` : ''
@@ -88,7 +97,9 @@ export const fullName = (s: Student) => {
 export const initials = (s: Student) =>
   `${s.firstName.charAt(0)}${s.lastName.charAt(0)}`.toUpperCase()
 
-export const gradeAndSection = (s: Student) => `${s.gradeLevel} - ${s.section}`
+/** "Grade 11 - Kamagong", or a dash when the learner is not enrolled yet. */
+export const gradeAndSection = (s: Student) =>
+  [s.gradeLevel, s.section].filter(Boolean).join(' - ') || '—'
 
 /** Initials for a registrar's sidebar avatar, e.g. "Rosario Gundran" -> "RG". */
 export const nameInitials = (name: string) =>

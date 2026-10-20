@@ -9,7 +9,7 @@ import { FormError } from '../components/states'
 export function Login() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { session, loading, signIn } = useAuth()
+  const { user, loading, signIn } = useAuth()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -20,7 +20,7 @@ export function Login() {
   // Where the user was headed before RequireAuth bounced them here.
   const from = (location.state as { from?: string } | null)?.from ?? '/students'
 
-  if (!loading && session) return <Navigate to={from} replace />
+  if (!loading && user) return <Navigate to={from} replace />
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()

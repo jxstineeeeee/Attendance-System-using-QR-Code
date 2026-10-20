@@ -8,6 +8,9 @@ dist/
 .env.*
 !.env.example
 
+# The API's local database credentials. api/config.example.php is the template.
+api/config.php
+
 # TypeScript incremental build cache
 *.tsbuildinfo
 
