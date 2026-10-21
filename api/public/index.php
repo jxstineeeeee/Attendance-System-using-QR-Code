@@ -14,6 +14,11 @@ require __DIR__ . '/../src/cards.php';
 require __DIR__ . '/../src/options.php';
 require __DIR__ . '/../src/printers.php';
 require __DIR__ . '/../src/scan.php';
+require __DIR__ . '/../src/devices.php';
+require __DIR__ . '/../src/attendance.php';
+require __DIR__ . '/../src/staff.php';
+require __DIR__ . '/../src/academic.php';
+require __DIR__ . '/../src/settings.php';
 
 install_error_handlers();
 handle_cors();
@@ -79,11 +84,16 @@ switch (true) {
         require_user();
         route_printers();
 
+    // GET /school — the name on the building, for the sign-in screens.
+    case $segments === ['school']:
+        $allow('GET');
+        route_school();
+
     // The gate. These serve the scanner app, not the registrar.
     case $segments === ['devices']:
         $allow('GET');
         require_user(SCANNER_ROLES);
-        route_devices();
+        route_scanner_devices();
 
     case $segments === ['gate']:
         $allow('GET');
@@ -93,6 +103,85 @@ switch (true) {
     case $segments === ['scan']:
         $allow('POST');
         route_scan(require_user(SCANNER_ROLES));
+
+    // The admin console. Admins only, checked route by route.
+    case $segments === ['admin', 'overview']:
+        $allow('GET');
+        require_user(ADMIN_ROLES);
+        route_overview();
+
+    case $segments === ['admin', 'attendance']:
+        $allow('GET');
+        require_user(ADMIN_ROLES);
+        route_attendance();
+
+    case $segments === ['admin', 'attendance', 'export']:
+        $allow('GET');
+        require_user(ADMIN_ROLES);
+        route_attendance_csv();
+
+    case $segments === ['admin', 'staff']:
+        $allow('GET', 'POST');
+        $user = require_user(ADMIN_ROLES);
+        $method === 'GET' ? route_list_staff($user) : route_create_staff($user);
+
+    case count($segments) === 3 && $segments[0] === 'admin'
+        && $segments[1] === 'staff':
+        $allow('PATCH');
+        route_update_staff(require_user(ADMIN_ROLES), $segments[2]);
+
+    case count($segments) === 4 && $segments[0] === 'admin'
+        && $segments[1] === 'staff' && $segments[3] === 'password':
+        $allow('POST');
+        route_set_staff_password(require_user(ADMIN_ROLES), $segments[2]);
+
+    case $segments === ['admin', 'devices']:
+        $allow('GET', 'POST');
+        $user = require_user(ADMIN_ROLES);
+        $method === 'GET' ? route_list_devices() : route_pair_device($user);
+
+    case count($segments) === 3 && $segments[0] === 'admin'
+        && $segments[1] === 'devices':
+        $allow('PATCH');
+        route_update_device(require_user(ADMIN_ROLES), $segments[2]);
+
+    case count($segments) === 4 && $segments[0] === 'admin'
+        && $segments[1] === 'devices' && $segments[3] === 'scans':
+        $allow('GET');
+        require_user(ADMIN_ROLES);
+        route_device_scans($segments[2]);
+
+    case $segments === ['admin', 'academic']:
+        $allow('GET');
+        require_user(ADMIN_ROLES);
+        route_academic();
+
+    case $segments === ['admin', 'academic', 'sections']:
+        $allow('POST');
+        route_create_section(require_user(ADMIN_ROLES));
+
+    case count($segments) === 4 && $segments[0] === 'admin'
+        && $segments[1] === 'academic' && $segments[2] === 'sections':
+        $allow('PATCH', 'DELETE');
+        $user = require_user(ADMIN_ROLES);
+        $method === 'PATCH'
+            ? route_update_section($user, $segments[3])
+            : route_delete_section($user, $segments[3]);
+
+    case $segments === ['admin', 'audit']:
+        $allow('GET');
+        require_user(ADMIN_ROLES);
+        route_audit();
+
+    case $segments === ['admin', 'audit', 'export']:
+        $allow('GET');
+        require_user(ADMIN_ROLES);
+        route_audit_csv();
+
+    case $segments === ['admin', 'settings']:
+        $allow('GET', 'PATCH');
+        $user = require_user(ADMIN_ROLES);
+        $method === 'GET' ? route_settings() : route_update_settings($user);
 
     // Checked before /students/{id}: no uuid is ever "lrn-taken".
     case $segments === ['students', 'lrn-taken']:

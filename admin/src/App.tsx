@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { RequireAuth } from './components/RequireAuth'
 import { AppLayout } from './layout/AppLayout'
 import { Login } from './pages/Login'
 import { Dashboard } from './pages/Dashboard'
@@ -12,17 +13,20 @@ import { Settings } from './pages/Settings'
 export function App() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="/login" element={<Login />} />
 
-      <Route element={<AppLayout />}>
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/attendance" element={<Attendance />} />
-        <Route path="/users" element={<Users />} />
-        <Route path="/devices" element={<Devices />} />
-        <Route path="/academic" element={<Academic />} />
-        <Route path="/audit" element={<AuditLog />} />
-        <Route path="/settings" element={<Settings />} />
+      {/* Everything past here needs an admin session. */}
+      <Route element={<RequireAuth />}>
+        <Route element={<AppLayout />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/attendance" element={<Attendance />} />
+          <Route path="/users" element={<Users />} />
+          <Route path="/devices" element={<Devices />} />
+          <Route path="/academic" element={<Academic />} />
+          <Route path="/audit" element={<AuditLog />} />
+          <Route path="/settings" element={<Settings />} />
+        </Route>
       </Route>
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -9,15 +9,19 @@ import {
   UserRound,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { auditCsvUrl, listAudit } from '../lib/db'
+import { useAsync } from '../lib/useAsync'
 import {
-  AUDIT,
   AUDIT_KIND_LABEL,
+  formatDateTime,
   type AuditEntry,
   type AuditKind,
-} from '../lib/mock'
+} from '../lib/types'
+import { ErrorBlock, LoadingBlock } from '../components/states'
 import {
   Badge,
   Button,
+  ButtonAnchor,
   Card,
   Field,
   Input,
@@ -43,22 +47,24 @@ const KIND_TONE: Record<AuditKind, Tone> = {
   security: 'danger',
 }
 
+const PAGE_SIZE = 50
+
 export function AuditLog() {
   const [query, setQuery] = useState('')
-  const [kind, setKind] = useState('')
+  const [kind, setKind] = useState<AuditKind | ''>('')
+  const [page, setPage] = useState(0)
 
-  const rows = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return AUDIT.filter((e) => {
-      if (kind && e.kind !== kind) return false
-      if (!q) return true
-      return (
-        e.actor.toLowerCase().includes(q) ||
-        e.action.toLowerCase().includes(q) ||
-        e.detail.toLowerCase().includes(q)
-      )
-    })
-  }, [query, kind])
+  const filters = useMemo(
+    () => ({ query, kind, page, pageSize: PAGE_SIZE }),
+    [query, kind, page],
+  )
+  const { data, loading, error, reload } = useAsync(
+    () => listAudit(filters),
+    [filters],
+  )
+
+  const rows = data?.rows ?? []
+  const total = data?.total ?? 0
 
   return (
     <div className="flex flex-col gap-8">
@@ -66,10 +72,10 @@ export function AuditLog() {
         title="Audit Log"
         description="Every change made in the system, and who made it."
       >
-        <Button variant="secondary">
+        <ButtonAnchor href={auditCsvUrl({ query, kind })} download>
           <Download size={17} strokeWidth={2.2} />
           Export log
-        </Button>
+        </ButtonAnchor>
       </PageHeader>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_190px]">
@@ -82,7 +88,10 @@ export function AuditLog() {
             <Input
               id="search"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                setQuery(e.target.value)
+                setPage(0)
+              }}
               placeholder="Search by person, action or detail"
               className="pl-11"
             />
@@ -93,7 +102,10 @@ export function AuditLog() {
           <Select
             id="kind"
             value={kind}
-            onChange={(e) => setKind(e.target.value)}
+            onChange={(e) => {
+              setKind(e.target.value as AuditKind | '')
+              setPage(0)
+            }}
           >
             <option value="">All categories</option>
             {(Object.keys(AUDIT_KIND_LABEL) as AuditKind[]).map((k) => (
@@ -105,23 +117,54 @@ export function AuditLog() {
         </Field>
       </div>
 
-      <Card className="p-6">
-        {rows.length === 0 ? (
-          <p className="py-12 text-center text-muted">
-            No log entries match those filters.
-          </p>
-        ) : (
-          <ol className="flex flex-col">
-            {rows.map((entry, i) => (
-              <AuditRow
-                key={entry.id}
-                entry={entry}
-                last={i === rows.length - 1}
-              />
-            ))}
-          </ol>
-        )}
-      </Card>
+      {error ? (
+        <ErrorBlock message={error} onRetry={reload} />
+      ) : (
+        <Card className="p-6">
+          {loading && !data ? (
+            <LoadingBlock label="Loading the audit log…" />
+          ) : rows.length === 0 ? (
+            <p className="py-12 text-center text-muted">
+              No log entries match those filters.
+            </p>
+          ) : (
+            <>
+              <ol className="flex flex-col">
+                {rows.map((entry, i) => (
+                  <AuditRow
+                    key={entry.id}
+                    entry={entry}
+                    last={i === rows.length - 1}
+                  />
+                ))}
+              </ol>
+
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-line-soft pt-4">
+                <span className="text-sm text-muted">
+                  Showing {page * PAGE_SIZE + 1}–{page * PAGE_SIZE + rows.length}{' '}
+                  of {total.toLocaleString()}
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    disabled={page === 0}
+                    onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  >
+                    Newer
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={(page + 1) * PAGE_SIZE >= total}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
+                    Older
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </Card>
+      )}
 
       <p className="text-[13px] text-muted">
         Entries are kept for the whole school year and cannot be edited or
@@ -132,7 +175,7 @@ export function AuditLog() {
 }
 
 function AuditRow({ entry, last }: { entry: AuditEntry; last: boolean }) {
-  const Icon = KIND_ICON[entry.kind]
+  const Icon = KIND_ICON[entry.kind] ?? SettingsIcon
   const security = entry.kind === 'security'
 
   return (
@@ -155,13 +198,16 @@ function AuditRow({ entry, last }: { entry: AuditEntry; last: boolean }) {
           <span className="text-[15px] font-semibold text-ink">
             {entry.action}
           </span>
-          <Badge tone={KIND_TONE[entry.kind]}>
-            {AUDIT_KIND_LABEL[entry.kind]}
+          <Badge tone={KIND_TONE[entry.kind] ?? 'neutral'}>
+            {AUDIT_KIND_LABEL[entry.kind] ?? entry.kind}
           </Badge>
         </div>
-        <p className="text-[14px] leading-snug text-muted">{entry.detail}</p>
+        {entry.detail && (
+          <p className="text-[14px] leading-snug text-muted">{entry.detail}</p>
+        )}
         <p className="text-[13px] text-subtle">
-          {entry.actor} · {entry.at}
+          {/* An actor whose account was deleted leaves the entry standing. */}
+          {entry.actor ?? 'Deleted account'} · {formatDateTime(entry.at)}
         </p>
       </div>
     </li>

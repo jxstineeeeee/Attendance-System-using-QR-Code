@@ -1,15 +1,18 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import {
   CalendarDays,
   ClipboardList,
   LayoutDashboard,
+  LogOut,
   ScrollText,
   Settings as SettingsIcon,
   SlidersHorizontal,
   Smartphone,
   UsersRound,
 } from 'lucide-react'
-import { ADMIN, SCHOOL } from '../lib/mock'
+import { useAuth } from '../lib/auth'
+import { useSchool } from '../lib/school'
+import { ROLE_LABEL, nameInitials, type Role } from '../lib/types'
 import { cx } from '../components/ui'
 
 const NAV = [
@@ -23,6 +26,15 @@ const NAV = [
 ]
 
 export function Sidebar() {
+  const navigate = useNavigate()
+  const { user, signOut } = useAuth()
+  const school = useSchool()
+
+  async function handleSignOut() {
+    await signOut()
+    navigate('/login', { replace: true })
+  }
+
   return (
     <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col gap-7 bg-brand px-[18px] py-7">
       <div className="flex items-center gap-3 px-2">
@@ -31,7 +43,7 @@ export function Sidebar() {
         </div>
         <div className="flex min-w-0 flex-col">
           <span className="display-title text-xl leading-[1.1] text-white">
-            {SCHOOL.name}
+            {school.name}
           </span>
           <span className="text-sm text-brand-tint">QR Attendance</span>
         </div>
@@ -69,14 +81,25 @@ export function Sidebar() {
 
       <div className="flex items-center gap-3 border-t border-brand-line px-2.5 py-3.5">
         <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gold text-[15px] font-bold text-ink">
-          {ADMIN.initials}
+          {user ? nameInitials(user.name) : '—'}
         </div>
         <div className="flex min-w-0 flex-col">
           <span className="truncate text-[15px] font-semibold text-white">
-            {ADMIN.name}
+            {user?.name ?? 'Signed out'}
           </span>
-          <span className="text-[13px] text-brand-tint">{ADMIN.role}</span>
+          <span className="text-[13px] text-brand-tint">
+            {user ? (ROLE_LABEL[user.role as Role] ?? user.role) : ''}
+          </span>
         </div>
+        <button
+          type="button"
+          onClick={handleSignOut}
+          aria-label="Sign out"
+          title="Sign out"
+          className="ml-auto flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-brand-tint transition-colors hover:bg-brand-active hover:text-white"
+        >
+          <LogOut size={16} strokeWidth={2} />
+        </button>
       </div>
     </aside>
   )

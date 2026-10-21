@@ -22,8 +22,13 @@ return [
      * this list stays unused unless you point the frontend straight at Apache.
      */
     'cors_origins' => [
+        // registrar, scanner, admin
         'http://localhost:5173',
         'http://127.0.0.1:5173',
+        'http://localhost:5174',
+        'http://127.0.0.1:5174',
+        'http://localhost:5175',
+        'http://127.0.0.1:5175',
     ],
 
     /**
@@ -34,5 +39,7 @@ return [
     'apps' => [
         'registrar' => ['registrar', 'admin'],
         'scanner' => ['scanner', 'admin'],
+        // The console that manages the other two; admins only.
+        'admin' => ['admin'],
     ],
 ];

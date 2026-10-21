@@ -55,26 +55,6 @@ function device_by_code(string $code): array
     return $device;
 }
 
-/** The scanners a device can identify itself as. */
-function route_devices(): never
-{
-    $rows = db()->query(
-        'select id, code, name, location, status, last_seen_at
-           from devices where is_active = 1 order by code'
-    )->fetchAll();
-
-    send(200, [
-        'devices' => array_map(static fn (array $d): array => [
-            'id' => (int) $d['id'],
-            'code' => $d['code'],
-            'name' => $d['name'],
-            'location' => $d['location'],
-            'status' => $d['status'],
-            'lastSeen' => iso($d['last_seen_at']),
-        ], $rows),
-    ]);
-}
-
 /**
  * Which of the day's four windows a wall-clock time falls in, or null when it
  * falls outside all of them.

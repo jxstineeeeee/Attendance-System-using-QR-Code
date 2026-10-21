@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 const REGISTRAR_ROLES = ['registrar', 'admin'];
 const SCANNER_ROLES = ['scanner', 'admin'];
+const ADMIN_ROLES = ['admin'];
 
 /** The shape the frontend knows a signed-in user by. */
 function user_json(array $row): array
