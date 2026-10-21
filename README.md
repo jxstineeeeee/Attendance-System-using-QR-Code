@@ -2,9 +2,10 @@
 
 ```
 api/         PHP API over the MySQL database — the backend for all three apps
+db/          SQL migrations for the qr_attendance schema
 registrar/   Registrar web app — student registration, profiles, ID cards (React + Vite)
+scanner/     Gate scanner — reads learner QR codes, records time in / time out (React + Vite)
 admin/       Admin console — attendance, staff, devices, settings (React + Vite)
-scanner/     QR scanner app — not started yet
 ```
 
 Each frontend is a self-contained Vite project with its own `package.json`,
@@ -27,10 +28,14 @@ the MySQL database `qr_attendance`, served by the Apache in Laragon.
 3. **A frontend:**
 
    ```bash
-   cd registrar   # or: cd admin
+   cd registrar   # or: cd scanner
    npm install
    npm run dev
    ```
 
-The registrar app is wired to the API. The admin console still runs on mock
-data.
+   The registrar serves on 5173 and the scanner on 5174, so both can run at
+   once. Note that they share one session cookie on `localhost`, because
+   browsers ignore the port — signing in to one signs the other out.
+
+The registrar and the scanner are wired to the API. The admin console still
+runs on mock data.

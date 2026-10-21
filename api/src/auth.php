@@ -5,7 +5,14 @@ declare(strict_types=1);
 /**
  * Session auth against the `users` table. Passwords are bcrypt hashes written
  * by PHP's password_hash(), so password_verify() is the only check needed.
+ *
+ * A session says who you are; what you may reach is decided per route by
+ * require_user(), which takes the roles that route serves. The registrar and
+ * the scanner therefore share one session mechanism without sharing access.
  */
+
+const REGISTRAR_ROLES = ['registrar', 'admin'];
+const SCANNER_ROLES = ['scanner', 'admin'];
 
 /** The shape the frontend knows a signed-in user by. */
 function user_json(array $row): array
@@ -32,9 +39,8 @@ function current_user(): ?array
     $stmt->execute([$id]);
     $row = $stmt->fetch();
 
-    // An account disabled or demoted mid-session loses its session with it.
-    if (!$row || $row['status'] !== 'active'
-        || !in_array($row['role'], allowed_roles(), true)) {
+    // An account disabled mid-session loses its session with it.
+    if (!$row || $row['status'] !== 'active') {
         unset($_SESSION['user_id']);
 
         return null;
@@ -43,13 +49,21 @@ function current_user(): ?array
     return $row;
 }
 
-/** Every endpoint but /auth/* goes through this. */
-function require_user(): array
+/**
+ * Every endpoint but /auth/* goes through this, naming the roles it serves.
+ * Signed in as the wrong kind of staff is a 403, not a 401 — signing in again
+ * would not help.
+ */
+function require_user(?array $roles = null): array
 {
     $user = current_user();
 
     if ($user === null) {
         fail(401, 'Please sign in.');
+    }
+
+    if (!in_array($user['role'], $roles ?? REGISTRAR_ROLES, true)) {
+        fail(403, 'This account does not have access to that.');
     }
 
     return $user;
@@ -83,6 +97,12 @@ function route_login(): never
 {
     $email = strtolower(field('email'));
     $password = (string) (body()['password'] ?? '');
+    // Which frontend is asking; it decides which roles are welcome.
+    $app = field('app', 'registrar');
+
+    if (app_roles($app) === []) {
+        fail(400, "There is no app called \"$app\".");
+    }
 
     if ($email === '' || $password === '') {
         fail(400, 'Enter your email and password.');
@@ -108,8 +128,8 @@ function route_login(): never
             : 'This account has been disabled.');
     }
 
-    if (!in_array($row['role'], allowed_roles(), true)) {
-        fail(403, 'This account does not have registrar access.');
+    if (!in_array($row['role'], app_roles($app), true)) {
+        fail(403, "This account does not have access to the $app app.");
     }
 
     // A fresh id on sign-in, so a session fixed before login is useless.
@@ -118,7 +138,7 @@ function route_login(): never
 
     db()->prepare('update users set last_active_at = now() where id = ?')
         ->execute([$row['id']]);
-    log_action($row['id'], 'security', 'sign-in', 'Registrar app');
+    log_action($row['id'], 'security', 'sign-in', ucfirst($app) . ' app');
 
     send(200, ['user' => user_json($row)]);
 }
@@ -127,7 +147,7 @@ function route_logout(): never
 {
     $id = $_SESSION['user_id'] ?? null;
     if (is_string($id)) {
-        log_action($id, 'security', 'sign-out', 'Registrar app');
+        log_action($id, 'security', 'sign-out', null);
     }
 
     $_SESSION = [];
@@ -146,10 +166,25 @@ function route_logout(): never
     send(200, ['user' => null]);
 }
 
-/** Who the cookie belongs to; the app calls this once on first paint. */
+/**
+ * Who the cookie belongs to, as far as the asking app is concerned.
+ *
+ * The session cookie is per host, and a browser ignores the port, so the
+ * registrar on :5173 and the scanner on :5174 share one cookie in
+ * development. A registrar session is therefore reported as signed out to the
+ * scanner, with otherRole saying what it actually is, rather than letting the
+ * app start up and fail on its first real request.
+ */
 function route_session(): never
 {
     $user = current_user();
+    $app = param('app', 'registrar');
+    $roles = app_roles($app);
+
+    if ($user !== null && $roles !== []
+        && !in_array($user['role'], $roles, true)) {
+        send(200, ['user' => null, 'otherRole' => $user['role']]);
+    }
 
     send(200, ['user' => $user === null ? null : user_json($user)]);
 }

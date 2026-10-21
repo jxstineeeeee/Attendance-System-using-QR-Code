@@ -9,10 +9,10 @@ declare(strict_types=1);
 
 const API_ROOT = __DIR__ . '/..';
 
-/** Roles that may sign in to the registrar app. */
-function allowed_roles(): array
+/** The roles allowed into one frontend, e.g. app_roles('scanner'). */
+function app_roles(string $app): array
 {
-    return config()['roles'] ?? ['registrar', 'admin'];
+    return config()['apps'][$app] ?? [];
 }
 
 function config(): array

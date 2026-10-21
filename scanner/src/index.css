@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+/* The same tokens as the registrar app, plus the outcome colours a gate
+   screen needs to be readable across a few metres of daylight. */
+@theme {
+  --color-brand: #1d5a3a;
+  --color-brand-hover: #174a30;
+  --color-brand-ink: #2b6446;
+  --color-brand-soft: #e3eee7;
+  --color-brand-tint: #d5e6db;
+
+  --color-cream: #f6f5f0;
+  --color-line: #dcdad1;
+  --color-line-soft: #ebe9e5;
+
+  --color-ink: #1a1a17;
+  --color-muted: #5a5a55;
+  --color-subtle: #8a8a84;
+
+  --color-gold: #c9a227;
+
+  /* Outcomes: present, late, rejected. */
+  --color-ok: #1b7a46;
+  --color-ok-soft: #dff2e6;
+  --color-late: #a8761a;
+  --color-late-soft: #fbefd0;
+  --color-bad: #a62828;
+  --color-bad-soft: #f6dede;
+
+  --font-sans: "Barlow", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Barlow Condensed", "Barlow", ui-sans-serif, sans-serif;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-ink);
+    color: var(--color-ink);
+  }
+
+  input,
+  select,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+}
+
+@utility display-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}

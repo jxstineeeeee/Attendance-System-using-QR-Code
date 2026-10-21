@@ -13,6 +13,7 @@ require __DIR__ . '/../src/students.php';
 require __DIR__ . '/../src/cards.php';
 require __DIR__ . '/../src/options.php';
 require __DIR__ . '/../src/printers.php';
+require __DIR__ . '/../src/scan.php';
 
 install_error_handlers();
 handle_cors();
@@ -77,6 +78,21 @@ switch (true) {
         $allow('GET');
         require_user();
         route_printers();
+
+    // The gate. These serve the scanner app, not the registrar.
+    case $segments === ['devices']:
+        $allow('GET');
+        require_user(SCANNER_ROLES);
+        route_devices();
+
+    case $segments === ['gate']:
+        $allow('GET');
+        require_user(SCANNER_ROLES);
+        route_gate();
+
+    case $segments === ['scan']:
+        $allow('POST');
+        route_scan(require_user(SCANNER_ROLES));
 
     // Checked before /students/{id}: no uuid is ever "lrn-taken".
     case $segments === ['students', 'lrn-taken']:
