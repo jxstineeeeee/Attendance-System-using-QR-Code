@@ -1,5 +1,9 @@
 import { useState } from 'react'
-import { ENROLLED, pct, type DayTotals } from '../lib/mock'
+import { pct, type DayTotals } from '../lib/types'
+
+/** "2026-10-19" -> "Oct 19", the axis label under each day. */
+const shortDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 
 /*
  * Share of enrolment by day. Every column totals the same enrolment figure, so
@@ -50,7 +54,14 @@ function barPath(x: number, y: number, w: number, h: number, rTop: number, rBott
   ].join(' ')
 }
 
-export function AttendanceChart({ week }: { week: DayTotals[] }) {
+export function AttendanceChart({
+  week,
+  enrolled,
+}: {
+  week: DayTotals[]
+  /** The roster the bars are a share of; absence is derived from it. */
+  enrolled: number
+}) {
   const [hovered, setHovered] = useState<number | null>(null)
 
   return (
@@ -96,7 +107,7 @@ export function AttendanceChart({ week }: { week: DayTotals[] }) {
             // Stack bottom-up so Present sits on the baseline.
             let cursor = PAD.top + PLOT_H
             const segments = SERIES.map((s, si) => {
-              const share = d[s.key] / ENROLLED
+              const share = enrolled === 0 ? 0 : d[s.key] / enrolled
               const raw = share * PLOT_H
               const h = Math.max(0, raw - (si === 0 ? 0 : GAP))
               const y = cursor - h
@@ -105,7 +116,7 @@ export function AttendanceChart({ week }: { week: DayTotals[] }) {
             })
 
             return (
-              <g key={d.day} opacity={active ? 1 : 0.42} className="transition-opacity">
+              <g key={d.date} opacity={active ? 1 : 0.42} className="transition-opacity">
                 {segments.map((s, si) => (
                   <path
                     key={s.key}
@@ -128,7 +139,7 @@ export function AttendanceChart({ week }: { week: DayTotals[] }) {
                   textAnchor="middle"
                   className="fill-white text-[15px] font-semibold tabular-nums"
                 >
-                  {pct(d.present, ENROLLED)}%
+                  {pct(d.present, enrolled)}%
                 </text>
 
                 <text
@@ -145,7 +156,7 @@ export function AttendanceChart({ week }: { week: DayTotals[] }) {
                   textAnchor="middle"
                   className="fill-subtle text-[11px]"
                 >
-                  {d.date}
+                  {shortDate(d.date)}
                 </text>
 
                 {/* Hit target spans the whole band, not just the bar itself. */}
@@ -163,7 +174,9 @@ export function AttendanceChart({ week }: { week: DayTotals[] }) {
           })}
         </svg>
 
-        {hovered !== null && <Tooltip day={week[hovered]} index={hovered} />}
+        {hovered !== null && (
+          <Tooltip day={week[hovered]} index={hovered} enrolled={enrolled} />
+        )}
       </div>
     </div>
   )
@@ -186,7 +199,15 @@ function Legend() {
   )
 }
 
-function Tooltip({ day, index }: { day: DayTotals; index: number }) {
+function Tooltip({
+  day,
+  index,
+  enrolled,
+}: {
+  day: DayTotals
+  index: number
+  enrolled: number
+}) {
   // Columns run the full height of the plot, so there is no clear space above a
   // bar to sit in. Park the card beside the hovered column instead — and flip it
   // to the other side for the last two, so it never runs off the card.
@@ -202,7 +223,7 @@ function Tooltip({ day, index }: { day: DayTotals; index: number }) {
       style={side}
     >
       <p className="text-[13px] font-semibold text-ink">
-        {day.day} · {day.date}
+        {day.day} · {shortDate(day.date)}
       </p>
       <dl className="mt-2 flex flex-col gap-1.5">
         {SERIES.map((s) => (
@@ -216,7 +237,7 @@ function Tooltip({ day, index }: { day: DayTotals; index: number }) {
             <dd className="ml-auto text-[13px] font-semibold text-ink tabular-nums">
               {day[s.key].toLocaleString()}
               <span className="ml-1.5 font-normal text-subtle">
-                {pct(day[s.key], ENROLLED)}%
+                {pct(day[s.key], enrolled)}%
               </span>
             </dd>
           </div>

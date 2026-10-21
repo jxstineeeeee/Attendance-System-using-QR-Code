@@ -1,17 +1,55 @@
-import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState, type FormEvent } from 'react'
+import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff, ShieldCheck } from 'lucide-react'
-import { SCHOOL } from '../lib/mock'
+import { ApiError } from '../lib/api'
+import { useAuth } from '../lib/auth'
+import { useSchool } from '../lib/school'
+import { ROLE_LABEL, type Role } from '../lib/types'
+import { FormError } from '../components/states'
 import { Button, Field, Input, Label } from '../components/ui'
 
 export function Login() {
   const navigate = useNavigate()
-  const [showPassword, setShowPassword] = useState(false)
+  const location = useLocation()
+  const { user, loading, otherRole, signIn } = useAuth()
+  const school = useSchool()
 
-  function handleSubmit(e: FormEvent) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  // A session already in the cookie skips the form.
+  useEffect(() => {
+    if (!loading && user) {
+      const from = (location.state as { from?: string } | null)?.from
+      navigate(from ?? '/dashboard', { replace: true })
+    }
+  }, [loading, user, location.state, navigate])
+
+  if (!loading && user) {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    // No auth yet — the frontend hands off straight to the dashboard.
-    navigate('/dashboard')
+    setError(null)
+    setBusy(true)
+
+    try {
+      await signIn(email, password)
+      const from = (location.state as { from?: string } | null)?.from
+      navigate(from ?? '/dashboard', { replace: true })
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : 'Something went wrong signing in. Try again.',
+      )
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -25,9 +63,9 @@ export function Login() {
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="display-title text-[28px] text-white">
-              {SCHOOL.name}
+              {school.name}
             </span>
-            <span className="text-base text-brand-tint">{SCHOOL.address}</span>
+            <span className="text-base text-brand-tint">{school.address}</span>
           </div>
         </div>
 
@@ -42,7 +80,7 @@ export function Login() {
           </h1>
           <p className="w-[420px] text-xl leading-[1.45] text-brand-pale">
             Staff accounts, gate devices, attendance records, and the academic
-            calendar for school year {SCHOOL.schoolYear}.
+            calendar.
           </p>
         </div>
 
@@ -64,25 +102,33 @@ export function Login() {
             </p>
           </div>
 
-          <Field label="Username or email" htmlFor="username">
+          {/*
+            All three apps share one cookie on localhost, because a browser
+            ignores the port. Say so, rather than looking signed out for no
+            reason.
+          */}
+          {otherRole && !error && (
+            <p className="rounded-lg bg-warn-bg px-3.5 py-2.5 text-[14px] leading-snug text-warn-fg">
+              This browser is signed in to the{' '}
+              {ROLE_LABEL[otherRole as Role] ?? otherRole} app. Signing in here
+              will sign that session out.
+            </p>
+          )}
+
+          <Field label="Email" htmlFor="email">
             <Input
-              id="username"
-              name="username"
+              id="email"
+              name="email"
+              type="email"
               autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               required
             />
           </Field>
 
           <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="password">Password</Label>
-              <a
-                href="#"
-                className="text-sm font-semibold text-brand hover:underline"
-              >
-                Forgot password?
-              </a>
-            </div>
+            <Label htmlFor="password">Password</Label>
             <div className="relative">
               <Input
                 id="password"
@@ -91,6 +137,8 @@ export function Login() {
                 autoComplete="current-password"
                 placeholder="••••••••"
                 className="pr-11"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 required
               />
               <button
@@ -104,8 +152,10 @@ export function Login() {
             </div>
           </div>
 
-          <Button type="submit" variant="primary" size="lg" block>
-            Sign in
+          {error && <FormError message={error} />}
+
+          <Button type="submit" variant="primary" size="lg" block disabled={busy}>
+            {busy ? 'Signing in…' : 'Sign in'}
           </Button>
 
           <p className="flex items-start gap-2.5 rounded-lg bg-cream px-3.5 py-3 text-[13px] leading-snug text-muted">
@@ -117,13 +167,6 @@ export function Login() {
             Every action in this console is recorded in the audit log against
             your account.
           </p>
-
-          <a
-            href="#"
-            className="text-center text-sm font-semibold text-brand hover:underline"
-          >
-            ← Back to the Registrar sign in
-          </a>
         </form>
       </div>
     </div>

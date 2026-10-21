@@ -5,8 +5,8 @@ The backend the frontends talk to: plain PHP 8 and PDO over the MySQL database
 and no Composer — the whole thing is the files in `src/` behind one front
 controller.
 
-The registrar and the gate scanner both use it; the admin console is meant to
-grow into the same API.
+All three frontends use it: the registrar, the gate scanner and the admin
+console.
 
 ## Setup
 
@@ -55,14 +55,20 @@ Run with an unknown email, it lists the accounts on file. An account whose
 `status` is `invited` becomes `active` once it has a password.
 
 Which roles may use which frontend is `config.php` → `apps`: registrar and
-admin for the registrar, scanner and admin for the gate. A login request names
-the app it is for, and every endpoint checks the role again, so a scanner
-account cannot reach learner records by pointing at the registrar's URL.
+admin for the registrar, scanner and admin for the gate, and admin only for the
+console. A login request names the app it is for, and every endpoint checks the
+role again, so a scanner account cannot reach learner records by pointing at
+the registrar's URL.
 
-One session cookie serves both apps, and browsers ignore the port — so on
-`localhost` the registrar on 5173 and the scanner on 5174 share it. Signing in
-to one signs the other out. `GET /auth/session?app=<name>` reports a session
-belonging to the other app as signed-out, with `otherRole` naming what it is.
+One session cookie serves all three, and browsers ignore the port — so on
+`localhost` the registrar (5173), the scanner (5174) and the admin console
+(5175) share it. Signing in to one signs the others out.
+`GET /auth/session?app=<name>` reports a session belonging to another app as
+signed-out, with `otherRole` naming what it is.
+
+Two rules keep an administrator from locking everyone out, and both live in
+`staff.php` rather than in the console: you cannot disable or demote your own
+account, and you cannot remove the last active administrator.
 
 ## Endpoints
 
@@ -90,6 +96,31 @@ Sessions are a PHP cookie (`qr_attendance_sid`, path `/`). Everything except
 | `POST`  | `/students/{id}/reissue`  | `{reason}` — revokes the active card, issues a new |
 | `POST`  | `/students/{id}/revoke`   | `{reason}` — revokes the active card, no new one   |
 | `PATCH` | `/cards/{id}`             | `{reason}` — revokes one card by its own id        |
+| `GET`   | `/school`                 | School name and address; **no session needed**     |
+
+The admin console's own endpoints, all `admin`-only:
+
+| Method   | Path                              | Does                                           |
+| -------- | --------------------------------- | ---------------------------------------------- |
+| `GET`    | `/admin/overview`                 | Dashboard: today, the week, gates, recent scans |
+| `GET`    | `/admin/attendance`               | `?date&session&query&grade&section&status&page` |
+| `GET`    | `/admin/attendance/export`        | The same sheet as a CSV download                |
+| `GET`    | `/admin/staff`                    | `?query&role&status`                            |
+| `POST`   | `/admin/staff`                    | `{name, email, role}` — creates it `invited`    |
+| `PATCH`  | `/admin/staff/{id}`               | `{name?, role?, status?}`                       |
+| `POST`   | `/admin/staff/{id}/password`      | `{password}` — an invited account goes active   |
+| `GET`    | `/admin/devices`                  | Every gate, retired ones included               |
+| `POST`   | `/admin/devices`                  | `{code, name, location?}` — pairs one           |
+| `PATCH`  | `/admin/devices/{id}`             | `{name?, location?, isActive?}`                 |
+| `GET`    | `/admin/devices/{id}/scans`       | That gate's scans today                         |
+| `GET`    | `/admin/academic`                 | Years, grades, strands, sections with rosters   |
+| `POST`   | `/admin/academic/sections`        | `{name, gradeLevelId, strandId?, adviser?}`     |
+| `PATCH`  | `/admin/academic/sections/{id}`   | The same shape                                  |
+| `DELETE` | `/admin/academic/sections/{id}`   | Refused while anybody is enrolled in it         |
+| `GET`    | `/admin/audit`                    | `?query&kind&from&page&pageSize`                |
+| `GET`    | `/admin/audit/export`             | The same log as a CSV download                  |
+| `GET`    | `/admin/settings`                 | The one `school_settings` row                   |
+| `PATCH`  | `/admin/settings`                 | Any subset of it                                |
 
 Errors are always `{"error": "a sentence for the user"}` with a real status
 code, which is what the frontend shows verbatim.
@@ -126,6 +157,11 @@ src/cards.php      issue, revoke, reissue
 src/options.php    the roster behind the form dropdowns
 src/printers.php   printers on the machine running this API
 src/scan.php       the gate: judge a scan, log it, write attendance
+src/devices.php    the gates: the scanner's pick-list, and pairing them
+src/attendance.php the dashboard and the attendance sheet, plus its CSV
+src/staff.php      staff accounts, roles, and setting a password
+src/academic.php   school years, grades, strands, sections
+src/settings.php   school_settings, GET /school, and the audit log
 tools/             command-line helpers, never served
 ```
 
@@ -172,3 +208,16 @@ Two details worth knowing:
 
 Refused scans are logged to `scan_events` like any other; only accepted ones
 touch `attendance_daily`.
+
+## Absence is the absence of a row
+
+Nothing writes `absent` rows. A learner who never scans simply has no row for
+that session, so every read in `attendance.php` starts from the enrolment
+roster and left-joins the day — it never starts from `attendance_daily`.
+`v_attendance_sheet` does start there, which is right for printing a sheet of
+who turned up and wrong for answering "who was not here"; that is why the
+console does not use it.
+
+It also means `absent` is not a value the status filter can match on. The
+filter asks for rows that are missing instead, and the dashboard's absent
+count is `enrolled − present − late`.

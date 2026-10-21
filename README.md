@@ -2,7 +2,7 @@
 
 ```
 api/         PHP API over the MySQL database — the backend for all three apps
-db/          SQL migrations for the qr_attendance schema
+db/          The qr_attendance schema, and the migrations that change it
 registrar/   Registrar web app — student registration, profiles, ID cards (React + Vite)
 scanner/     Gate scanner — reads learner QR codes, records time in / time out (React + Vite)
 admin/       Admin console — attendance, staff, devices, settings (React + Vite)
@@ -28,14 +28,28 @@ the MySQL database `qr_attendance`, served by the Apache in Laragon.
 3. **A frontend:**
 
    ```bash
-   cd registrar   # or: cd scanner
+   cd registrar   # or: cd scanner, cd admin
    npm install
    npm run dev
    ```
 
-   The registrar serves on 5173 and the scanner on 5174, so both can run at
-   once. Note that they share one session cookie on `localhost`, because
-   browsers ignore the port — signing in to one signs the other out.
+   The registrar serves on 5173, the scanner on 5174 and the admin console on
+   5175, so all three can run at once. Note that they share one session cookie
+   on `localhost`, because browsers ignore the port — signing in to one signs
+   the others out.
 
-The registrar and the scanner are wired to the API. The admin console still
-runs on mock data.
+All three apps are wired to the API; none of them run on mock data any more.
+
+## The database
+
+[`db/schema.sql`](db/schema.sql) is a snapshot of the live structure, kept in
+the repo so the schema is readable without a running MySQL. It is not the
+migration path — [`db/migrations/`](db/migrations) holds the ordered changes,
+and the snapshot is regenerated after each one:
+
+```bash
+mysqldump -u root --no-data --routines --triggers --skip-dump-date --no-tablespaces qr_attendance > db/schema.sql
+```
+
+To build the database from nothing, run the snapshot, then any migration newer
+than it.

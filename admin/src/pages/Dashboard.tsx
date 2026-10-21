@@ -11,17 +11,19 @@ import {
   Users as UsersIcon,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { getOverview } from '../lib/db'
+import { useAsync } from '../lib/useAsync'
 import {
-  DEVICES,
   DEVICE_STATUS_LABEL,
-  ENROLLED,
-  RECENT_SCANS,
-  TODAY,
-  WEEK,
+  formatClock,
+  formatDate,
+  formatTime,
   pct,
+  type Device,
   type DeviceStatus,
   type ScanEvent,
-} from '../lib/mock'
+} from '../lib/types'
+import { ErrorBlock, LoadingBlock } from '../components/states'
 import {
   Badge,
   Card,
@@ -39,37 +41,52 @@ const DEVICE_TONE: Record<DeviceStatus, Tone> = {
 }
 
 export function Dashboard() {
+  const { data, loading, error, reload } = useAsync(getOverview, [])
+
+  if (loading && !data) {
+    return <LoadingBlock label="Loading the dashboard…" />
+  }
+  if (error && !data) {
+    return <ErrorBlock message={error} onRetry={reload} />
+  }
+  if (!data) return null
+
+  const { todayTotals: today, enrolled, week } = data
+  // Absence is derived from the roster, not counted from rows — nothing
+  // writes `absent` rows yet, so a learner who never scanned has none.
+  const scanned = today.present + today.late
+
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
         title="Dashboard"
-        description={`Wednesday, ${TODAY.date}, 2026 · school year 2026-2027`}
+        description={`${formatDate(data.today)} · school year ${data.schoolYear ?? '—'} · morning session`}
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile
           icon={UserCheck}
           label="Present today"
-          value={TODAY.present.toLocaleString()}
-          note={`${pct(TODAY.present, ENROLLED)}% of enrolment`}
+          value={today.present.toLocaleString()}
+          note={`${pct(today.present, enrolled)}% of enrolment`}
         />
         <StatTile
           icon={Clock}
           label="Late today"
-          value={TODAY.late.toLocaleString()}
-          note={`${pct(TODAY.late, ENROLLED)}% · after the 7:20 AM cut-off`}
+          value={today.late.toLocaleString()}
+          note={`${pct(today.late, enrolled)}% · after the ${formatClock(data.amLateCutoffAt)} cut-off`}
         />
         <StatTile
           icon={UserX}
           label="Absent today"
-          value={TODAY.absent.toLocaleString()}
-          note={`${pct(TODAY.absent, ENROLLED)}% · no scan recorded`}
+          value={today.absent.toLocaleString()}
+          note={`${pct(today.absent, enrolled)}% · no scan recorded`}
         />
         <StatTile
           icon={UsersIcon}
           label="Enrolled"
-          value={ENROLLED.toLocaleString()}
-          note="Across 6 grade levels"
+          value={enrolled.toLocaleString()}
+          note={`Across ${data.gradeLevels} grade levels`}
         />
       </div>
 
@@ -78,8 +95,8 @@ export function Dashboard() {
           <div className="flex flex-col gap-1">
             <CardTitle>Attendance this week</CardTitle>
             <p className="text-sm text-muted">
-              Share of the {ENROLLED.toLocaleString()} enrolled learners, Monday
-              to Friday.
+              Share of the {enrolled.toLocaleString()} enrolled learners,
+              Monday to Friday, morning session.
             </p>
           </div>
           <Link
@@ -92,7 +109,7 @@ export function Dashboard() {
         </div>
 
         <div className="mt-6">
-          <AttendanceChart week={WEEK} />
+          <AttendanceChart week={week} enrolled={enrolled} />
         </div>
 
         {/* The table view the chart's sub-3:1 fills oblige — and easier to scan. */}
@@ -120,9 +137,9 @@ export function Dashboard() {
             </tr>
           </thead>
           <tbody>
-            {WEEK.map((d) => (
+            {week.map((d) => (
               <tr
-                key={d.day}
+                key={d.date}
                 className="border-b border-line-soft last:border-b-0"
               >
                 <th
@@ -130,7 +147,9 @@ export function Dashboard() {
                   className="py-2.5 text-left text-[15px] font-medium text-ink"
                 >
                   {d.day}{' '}
-                  <span className="font-normal text-subtle">{d.date}</span>
+                  <span className="font-normal text-subtle">
+                    {formatDate(d.date).replace(/, \d{4}$/, '')}
+                  </span>
                 </th>
                 <td className="py-2.5 text-right text-[15px] text-muted tabular-nums">
                   {d.present.toLocaleString()}
@@ -142,17 +161,25 @@ export function Dashboard() {
                   {d.absent.toLocaleString()}
                 </td>
                 <td className="py-2.5 text-right text-[15px] font-semibold text-ink tabular-nums">
-                  {pct(d.present + d.late, ENROLLED)}%
+                  {pct(d.present + d.late, enrolled)}%
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+
+        {scanned === 0 && (
+          <p className="mt-5 rounded-lg bg-cream px-4 py-3 text-[14px] leading-snug text-muted">
+            No scans have been recorded today yet, so everyone shows as absent.
+            Absence is the absence of a scan — nothing writes absent rows ahead
+            of time.
+          </p>
+        )}
       </Card>
 
       <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
-        <RecentActivity />
-        <DeviceStatusCard />
+        <RecentActivity scans={data.recentScans} />
+        <DeviceStatusCard devices={data.devices} />
       </div>
     </div>
   )
@@ -187,25 +214,33 @@ function StatTile({
   )
 }
 
-function RecentActivity() {
+function RecentActivity({ scans }: { scans: ScanEvent[] }) {
   return (
     <Card className="p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <CardTitle>Recent gate activity</CardTitle>
-        <span className="flex items-center gap-2 text-[13px] text-muted">
-          <span className="relative flex size-2">
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-present opacity-70" />
-            <span className="relative inline-flex size-2 rounded-full bg-present" />
+        {scans.length > 0 && (
+          <span className="flex items-center gap-2 text-[13px] text-muted">
+            <span className="relative flex size-2">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-present opacity-70" />
+              <span className="relative inline-flex size-2 rounded-full bg-present" />
+            </span>
+            Live
           </span>
-          Live
-        </span>
+        )}
       </div>
 
-      <ul className="mt-5 flex flex-col">
-        {RECENT_SCANS.map((e) => (
-          <ScanRow key={e.id} event={e} />
-        ))}
-      </ul>
+      {scans.length === 0 ? (
+        <p className="py-10 text-center text-muted">
+          No scans recorded yet.
+        </p>
+      ) : (
+        <ul className="mt-5 flex flex-col">
+          {scans.map((e) => (
+            <ScanRow key={e.id} event={e} />
+          ))}
+        </ul>
+      )}
     </Card>
   )
 }
@@ -232,23 +267,28 @@ function ScanRow({ event }: { event: ScanEvent }) {
             invalid ? 'text-danger-fg' : 'text-ink',
           )}
         >
-          {event.name}
+          {/* A refused scan may match no learner; say so rather than blank. */}
+          {event.name ?? 'Unrecognised card'}
         </span>
         <span className="truncate text-[13px] text-muted tabular-nums">
-          {event.lrn} · {event.gate}
+          {event.lrn ?? event.reason ?? '—'} · {event.gate}
         </span>
       </div>
 
       <div className="ml-auto flex shrink-0 items-center gap-3">
         {event.outcome === 'late' && <Badge tone="warn">Late</Badge>}
         {invalid && <Badge tone="danger">Invalid ID</Badge>}
-        <span className="text-[13px] text-muted tabular-nums">{event.time}</span>
+        <span className="text-[13px] text-muted tabular-nums">
+          {formatTime(event.at) ?? '—'}
+        </span>
       </div>
     </li>
   )
 }
 
-function DeviceStatusCard() {
+function DeviceStatusCard({ devices }: { devices: Device[] }) {
+  const paired = devices.filter((d) => d.isActive)
+
   return (
     <Card className="p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -261,29 +301,34 @@ function DeviceStatusCard() {
         </Link>
       </div>
 
-      <ul className="mt-5 flex flex-col gap-3">
-        {DEVICES.map((d) => (
-          <li
-            key={d.id}
-            className="flex items-center gap-3 rounded-lg border border-line-soft px-3.5 py-3"
-          >
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-cream text-muted">
-              <Smartphone size={17} strokeWidth={2} />
-            </span>
-            <div className="flex min-w-0 flex-col">
-              <span className="truncate text-[15px] font-semibold text-ink">
-                {d.name}
+      {paired.length === 0 ? (
+        <p className="py-10 text-center text-muted">No devices paired yet.</p>
+      ) : (
+        <ul className="mt-5 flex flex-col gap-3">
+          {paired.map((d) => (
+            <li
+              key={d.id}
+              className="flex items-center gap-3 rounded-lg border border-line-soft px-3.5 py-3"
+            >
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-cream text-muted">
+                <Smartphone size={17} strokeWidth={2} />
               </span>
-              <span className="text-[13px] text-muted tabular-nums">
-                {d.scansToday.toLocaleString()} scans · {d.lastSeen}
-              </span>
-            </div>
-            <Badge tone={DEVICE_TONE[d.status]} className="ml-auto shrink-0">
-              {DEVICE_STATUS_LABEL[d.status]}
-            </Badge>
-          </li>
-        ))}
-      </ul>
+              <div className="flex min-w-0 flex-col">
+                <span className="truncate text-[15px] font-semibold text-ink">
+                  {d.name}
+                </span>
+                <span className="text-[13px] text-muted tabular-nums">
+                  {d.scansToday.toLocaleString()} scans ·{' '}
+                  {d.lastSeen ? formatTime(d.lastSeen) : 'never seen'}
+                </span>
+              </div>
+              <Badge tone={DEVICE_TONE[d.status]} className="ml-auto shrink-0">
+                {DEVICE_STATUS_LABEL[d.status]}
+              </Badge>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   )
 }

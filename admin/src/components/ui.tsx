@@ -1,4 +1,5 @@
 import type {
+  AnchorHTMLAttributes,
   ButtonHTMLAttributes,
   InputHTMLAttributes,
   ReactNode,
@@ -77,6 +78,24 @@ export function ButtonLink({
   return (
     <Link className={buttonClasses(variant, size, block, className)} {...rest} />
   )
+}
+
+/**
+ * Same surface again, but a plain anchor. The router must not intercept a
+ * download: the browser has to follow it for Content-Disposition to apply.
+ */
+export function ButtonAnchor({
+  variant = 'secondary',
+  size = 'md',
+  block,
+  className,
+  ...rest
+}: AnchorHTMLAttributes<HTMLAnchorElement> & {
+  variant?: Variant
+  size?: Size
+  block?: boolean
+}) {
+  return <a className={buttonClasses(variant, size, block, className)} {...rest} />
 }
 
 /** Square button that holds only an icon; keeps the 36px row-action footprint. */

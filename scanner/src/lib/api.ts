@@ -36,6 +36,20 @@ async function request<T>(
   }
 
   const text = await res.text()
+
+  /*
+   * With the Vite dev proxy in front, a dead Apache never reaches the catch
+   * above: the proxy itself answers 500 with an empty text/plain body. Treat a
+   * bodyless gateway failure as what it is, so the screen says to start
+   * Laragon instead of "Request failed (HTTP 500)".
+   */
+  if (text.trim() === '' && res.status >= 500) {
+    throw new ApiError(
+      `Cannot reach the API at ${BASE}. Is Apache running in Laragon?`,
+      res.status,
+    )
+  }
+
   let data: unknown = null
   if (text) {
     try {
