@@ -5,7 +5,7 @@ The backend the frontends talk to: plain PHP 8 and PDO over the MySQL database
 and no Composer — the whole thing is the files in `src/` behind one front
 controller.
 
-The registrar app uses it today; the admin console and the scanner are meant to
+The registrar and the gate scanner both use it; the admin console is meant to
 grow into the same API.
 
 ## Setup
@@ -52,9 +52,17 @@ php api/tools/set-password.php r.gundran@lunanhs.edu.ph "a good password"
 ```
 
 Run with an unknown email, it lists the accounts on file. An account whose
-`status` is `invited` becomes `active` once it has a password. Only the roles
-in `config.php` → `roles` (registrar and admin) may sign in to the registrar
-app; a `scanner` account is refused with a clear message.
+`status` is `invited` becomes `active` once it has a password.
+
+Which roles may use which frontend is `config.php` → `apps`: registrar and
+admin for the registrar, scanner and admin for the gate. A login request names
+the app it is for, and every endpoint checks the role again, so a scanner
+account cannot reach learner records by pointing at the registrar's URL.
+
+One session cookie serves both apps, and browsers ignore the port — so on
+`localhost` the registrar on 5173 and the scanner on 5174 share it. Signing in
+to one signs the other out. `GET /auth/session?app=<name>` reports a session
+belonging to the other app as signed-out, with `otherRole` naming what it is.
 
 ## Endpoints
 
@@ -70,6 +78,9 @@ Sessions are a PHP cookie (`qr_attendance_sid`, path `/`). Everything except
 | `GET`   | `/auth/session`           | `{user}` or `{user: null}`                         |
 | `GET`   | `/options`                | Grade levels, sections and strands on the roster   |
 | `GET`   | `/printers`               | Printers installed on the machine running this API |
+| `GET`   | `/devices`                | The gates a scanner can identify itself as (scanner) |
+| `GET`   | `/gate`                   | The gate hours and the server clock (scanner)      |
+| `POST`  | `/scan`                   | One QR presented at a gate (scanner)               |
 | `GET`   | `/students`               | `?query&grade&section&status&page&pageSize`        |
 | `POST`  | `/students`               | Registers a learner, enrols them, issues their ID  |
 | `GET`   | `/students/lrn-taken`     | `?lrn=` → `{taken}`                                |
@@ -113,6 +124,8 @@ src/auth.php       sign in / out, current_user(), require_user(), audit trail
 src/students.php   list, read, create (student + enrolment), activate
 src/cards.php      issue, revoke, reissue
 src/options.php    the roster behind the form dropdowns
+src/printers.php   printers on the machine running this API
+src/scan.php       the gate: judge a scan, log it, write attendance
 tools/             command-line helpers, never served
 ```
 
@@ -133,4 +146,29 @@ Three things are deliberately the database's job, not this code's:
   the form sent and ignores whatever strand the browser thought applied.
 
 Who performed an action is never taken from the request body — `registered_by`,
-`issued_by` and `audit_log.actor_id` all come from the session.
+`issued_by`, `scan_events.operator_id` and `audit_log.actor_id` all come from
+the session.
+
+## The gate
+
+`POST /scan` takes `{qrContent, device, clientEventId}` and answers with the
+verdict, the learner, and both halves of their day. The rules come from
+`school_settings` on every scan, so changing the timetable in the admin console
+takes effect immediately; `scanner/README.md` has the full decision table.
+
+The day has four windows — morning in, morning out, afternoon in, afternoon
+out — and the clock alone decides which one a scan belongs to. Each half of the
+day is its own `attendance_daily` row, keyed by
+`(student_id, attendance_date, session)`.
+
+Two details worth knowing:
+
+- **Every clock reading comes from MySQL** (`now()`, `curdate()`, `curtime()`).
+  PHP runs in UTC on this host while MySQL runs in local time, so asking PHP
+  for the time would put a learner on the wrong side of the late cutoff.
+- **`clientEventId` makes a resend safe.** A unique index on
+  (device_id, client_event_id) means a scan sent twice after a dropped reply
+  replays the first decision instead of recording two.
+
+Refused scans are logged to `scan_events` like any other; only accepted ones
+touch `attendance_daily`.

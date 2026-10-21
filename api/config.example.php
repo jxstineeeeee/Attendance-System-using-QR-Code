@@ -26,6 +26,13 @@ return [
         'http://127.0.0.1:5173',
     ],
 
-    /** Roles allowed to sign in to the registrar app. */
-    'roles' => ['registrar', 'admin'],
+    /**
+     * Which roles may sign in to each frontend. The login request names the
+     * app it is for, and every endpoint checks the role again, so a scanner
+     * account cannot reach the registrar's data by pointing at its URL.
+     */
+    'apps' => [
+        'registrar' => ['registrar', 'admin'],
+        'scanner' => ['scanner', 'admin'],
+    ],
 ];
